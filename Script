@@ -1,0 +1,121 @@
+local vgui = require("vgui")
+local client = client or Client
+local interface = vgui.Create("DFrame")
+local visible = false
+local aimbot = false
+local speed = 250
+local espColor = Color(255, 255, 255, 255)
+
+function CreateGUI()
+    local verticalScroll = vgui.Create("DScrollPanel", interface)
+    verticalScroll:Dock(FILL)
+
+    local frame = vgui.Create("DCheckBoxLabel", verticalScroll)
+    frame:Dock(TOP)
+    frame:SetText("Enable Aimbot")
+    frame:SetValue(false)
+    frame.DoClick = function()
+        aimbot = frame:GetValue()
+    end
+
+    local frame = vgui.Create("DCheckBoxLabel", verticalScroll)
+    frame:Dock(TOP)
+    frame:SetText("Show ESP")
+    frame:SetValue(true)
+    frame.DoClick = function()
+        visible = frame:GetValue()
+    end
+
+    local frame = vgui.Create("DColorMipMap", verticalScroll)
+    frame:Dock(TOP)
+    frame:SetText("ESP Color")
+    frame:SetSize(250, 30)
+    frame:SetValue(espColor)
+    frame.OnColorChanged = function(self, r, g, b, a)
+        espColor = Color(r, g, b, a)
+    end
+
+    interface:SetTitle("Nerd Rage")
+
+    interface:SetSize(500, 500)
+    interface:DockAndSize(FILL, FILL, 500, 200)
+    interface:Center()
+    interface:MakePopup()
+    interface.Paint = function(self, w, h)
+        draw.RoundedBox(8, 0, 0, w, h, Color(63, 110, 170, 230))
+        draw.SimpleText("Nerd Rage", "MarkMoosonLarge", w / 2, h / 2, Color(255, 255, 255), TEXT\_ALIGN\_CENTER)
+    end
+
+    interface:ShowCloseButton(false)
+    interface:SetVisible(false)
+
+    interface:think = function(self)
+        if self:ShouldClose() then return end
+
+        if visible then
+            render.SetColorMaterial(material_system(self.Material))
+            for _, entity in pairs(entities()) do
+                render.SetColorModulation(espColor:ToVector())
+
+                if entity:IsPlayer() then
+                    local texData = surface.GetTextureID("pp/player")
+                    local texture = texture(texData)
+                    texture:Dimensions(64, 64)
+                    surface.SetDrawColor(espColor)
+                    surface.DrawTexturedRect(entity:GetPos().x - (entity:OBBCenter().x + entity:OBBWidth()/2), entity:GetPos().y - (entity:OBBCenter().y + entity:OBBHeight()/2), 64, 64)
+                end
+            end
+        end
+
+        if aimbot and client:GetAllTeammates() == 0 and ClientSideAnimationActive(0) then
+            local localPlayer = client:GetLocalPlayer()
+            if localPlayer then
+                local communityPage = localPlayer:GetWebAPI():GetPlayerNews(localPlayer:SteamID64())
+                local players = communityPage.players
+
+                for _, player in pairs(players) do
+                    local targetEntity = GetPlayerBySteamID(player.steamId64)
+
+                    if IsValid(targetEntity) then
+                        if client:GetEyeTrace().Entity == targetEntity and
+                           (targetEntity:GetPos().z > localPlayer:GetPos().z) and
+                           client:GetViewAngle(targetEntity:GetPos()):Distance(Angle(0, 0, 0)) <= Rad(25) then
+                            local eyePos = client:GetEyeTrace().EndPos
+                            local targetPos = targetEntity:GetPos()
+                            local forward = client:GetAIMovementTwo(\_ROOT, 0).forward
+                            local moveAngle = client:GetViewAngles() + Angle(0, 90, 0)
+                            local moveForward = forward:Rotate(moveAngle)
+
+                            local newPos = eyePos + moveForward * speed * FrameTime()
+                            local tr = {}
+                            tr.start = eyePos
+                            tr.endpos = newPos
+                            tr.filter = client
+                            tr.mask = MASK\_SHOT\_HULL
+
+                            local trace = util.TraceLine(tr)
+
+                            if (trace.Hit) then
+                                localPlayer:SetPos(trace.HitPos)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local interfaceMat = Material(
+    "VGUI/Normal.png",
+    "U rounded_edges_position_x" .. 0,
+    "U rounded_edges_position_y" .. 0,
+    "U rounded_edges_size_x" .. 8,
+    "U rounded_edges_size_y" .. 8,
+    "U tl_radius" .. 8,
+    "U tr_radius" .. 8,
+    "U bl_radius" .. 8,
+    "U br_radius" .. 8
+)
+
+concommand.Add("nerragelua", CreateGUI)
